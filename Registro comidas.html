@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Registro de Comidas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 400px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .summary {
+            margin-top: 20px;
+        }
+        .day-summary {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .hidden {
+            display: none;
+        }
+        .edit-btn, .delete-btn {
+            padding: 5px 10px;
+            margin: 2px;
+            font-size: 14px;
+        }
+        .edit-btn {
+            background-color: #ffc107;
+        }
+        .delete-btn {
+            background-color: #dc3545;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Menú Principal -->
+        <div id="mainMenu">
+            <h1>Menú Principal</h1>
+            <button onclick="showPage('registerMeal')">Registrar Comida</button>
+            <button onclick="showPage('summaryPage')">Resumen entre Fechas</button>
+            <button onclick="showPage('modifyData')">Modificar Datos</button>
+        </div>
+
+        <!-- Página de Registro de Comida -->
+        <div id="registerMeal" class="hidden">
+            <h1>Registrar Comida</h1>
+            <form id="mealForm">
+                <label for="mealDate">Fecha:</label>
+                <input type="date" id="mealDate" required>
+
+                <label for="mealType">Tipo de Comida:</label>
+                <select id="mealType" required>
+                    <option value="Desayuno">Desayuno</option>
+                    <option value="Comida Mediodía">Comida Mediodía</option>
+                    <option value="Merienda">Merienda</option>
+                    <option value="Cena">Cena</option>
+                    <option value="Peso Usuario">Peso Usuario</option>
+                </select>
+
+                <div id="mealFields">
+                    <!-- Campos para comidas normales -->
+                    <label for="mealTime">Hora de Ingestión:</label>
+                    <input type="time" id="mealTime" required>
+
+                    <label for="mealFood">Tipo de Comida Ingerida:</label>
+                    <input type="text" id="mealFood" required>
+
+                    <label for="mealWeight">Peso Aproximado (g):</label>
+                    <input type="number" id="mealWeight" required>
+
+                    <label for="mealDrink">Bebida:</label>
+                    <input type="text" id="mealDrink" required>
+                </div>
+
+                <div id="userWeightFields" class="hidden">
+                    <!-- Campos para el peso del usuario -->
+                    <label for="userWeightTime">Hora de Pesación:</label>
+                    <input type="time" id="userWeightTime">
+
+                    <label for="userWeight">Peso Marcado (kg):</label>
+                    <input type="number" id="userWeight" step="0.1">
+                </div>
+
+                <button type="submit">Guardar Registro</button>
+            </form>
+            <button onclick="showPage('mainMenu')">Volver al Menú Principal</button>
+        </div>
+
+        <!-- Página de Resumen -->
+        <div id="summaryPage" class="hidden">
+            <h1>Resumen entre Fechas</h1>
+            <label for="startDate">Fecha Inicio:</label>
+            <input type="date" id="startDate">
+
+            <label for="endDate">Fecha Fin:</label>
+            <input type="date" id="endDate">
+
+            <button onclick="showSummary()">Mostrar Resumen</button>
+            <button onclick="exportToExcel()">Exportar a Excel</button>
+            <button onclick="showPage('mainMenu')">Volver al Menú Principal</button>
+
+            <div id="summaryResult"></div>
+        </div>
+
+        <!-- Página de Modificar Datos -->
+        <div id="modifyData" class="hidden">
+            <h1>Modificar Datos</h1>
+            <label for="searchDate">Seleccione una fecha:</label>
+            <input type="date" id="searchDate">
+            <button onclick="searchMeals()">Buscar Comidas</button>
+            <button onclick="showPage('mainMenu')">Volver al Menú Principal</button>
+
+            <div id="editResult"></div>
+        </div>
+    </div>
+
+    <script>
+        const mealForm = document.getElementById('mealForm');
+        const summaryResult = document.getElementById('summaryResult');
+        const editResult = document.getElementById('editResult');
+        const mealType = document.getElementById('mealType');
+        let editingId = null;
+
+        // Generar ID único
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Cargar datos
+        function loadMeals() {
+            return JSON.parse(localStorage.getItem('meals')) || [];
+        }
+
+        // Guardar datos
+        function saveMeals(meals) {
+            localStorage.setItem('meals', JSON.stringify(meals));
+        }
+
+        // Mostrar páginas
+        function showPage(pageId) {
+            document.querySelectorAll('.container > div').forEach(page => {
+                page.classList.add('hidden');
+            });
+            document.getElementById(pageId).classList.remove('hidden');
+        }
+
+        // Cambiar campos según tipo
+        mealType.addEventListener('change', function() {
+            const isWeight = this.value === "Peso Usuario";
+            document.getElementById('mealFields').classList.toggle('hidden', isWeight);
+            document.getElementById('userWeightFields').classList.toggle('hidden', !isWeight);
+        });
+
+        // Guardar/Editar registro
+        mealForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const meal = {
+                id: editingId || generateId(),
+                date: document.getElementById('mealDate').value,
+                type: mealType.value,
+                time: mealType.value === "Peso Usuario" 
+                    ? document.getElementById('userWeightTime').value 
+                    : document.getElementById('mealTime').value,
+                food: mealType.value === "Peso Usuario" ? "" : document.getElementById('mealFood').value,
+                weight: mealType.value === "Peso Usuario" ? "" : document.getElementById('mealWeight').value,
+                drink: mealType.value === "Peso Usuario" ? "" : document.getElementById('mealDrink').value,
+                userWeight: mealType.value === "Peso Usuario" ? document.getElementById('userWeight').value : ""
+            };
+
+            let meals = loadMeals();
+            const index = meals.findIndex(m => m.id === meal.id);
+
+            if (index > -1) {
+                meals[index] = meal; // Actualizar
+            } else {
+                meals.push(meal); // Nuevo registro
+            }
+
+            saveMeals(meals);
+            mealForm.reset();
+            editingId = null;
+            alert(meal.id ? 'Registro actualizado!' : 'Registro guardado!');
+            showPage('mainMenu');
+        });
+
+        // Buscar registros
+        function searchMeals() {
+            const searchDate = document.getElementById('searchDate').value;
+            const meals = loadMeals().filter(meal => meal.date === searchDate);
+
+            let editHTML = '<h3>Comidas Registradas</h3>';
+            meals.forEach(meal => {
+                editHTML += `
+                    <div class="day-summary">
+                        <p><strong>Tipo:</strong> ${meal.type}</p>
+                        <p><strong>Hora:</strong> ${meal.time}</p>
+                        ${meal.type === "Peso Usuario" ? 
+                            `<p><strong>Peso Marcado:</strong> ${meal.userWeight} kg</p>` : 
+                            `<p><strong>Comida:</strong> ${meal.food}</p>
+                             <p><strong>Peso:</strong> ${meal.weight}g</p>
+                             <p><strong>Bebida:</strong> ${meal.drink}</p>`}
+                        <button class="edit-btn" onclick="editMeal('${meal.id}')">Editar</button>
+                        <button class="delete-btn" onclick="confirmDelete('${meal.id}')">Eliminar</button>
+                    </div>
+                `;
+            });
+
+            editResult.innerHTML = editHTML || '<p>No hay registros</p>';
+        }
+
+        // Editar registro
+        function editMeal(id) {
+            const meals = loadMeals();
+            const meal = meals.find(m => m.id === id);
+            
+            document.getElementById('mealDate').value = meal.date;
+            document.getElementById('mealType').value = meal.type;
+            
+            if (meal.type === "Peso Usuario") {
+                document.getElementById('userWeightTime').value = meal.time;
+                document.getElementById('userWeight').value = meal.userWeight;
+            } else {
+                document.getElementById('mealTime').value = meal.time;
+                document.getElementById('mealFood').value = meal.food;
+                document.getElementById('mealWeight').value = meal.weight;
+                document.getElementById('mealDrink').value = meal.drink;
+            }
+
+            editingId = meal.id;
+            showPage('registerMeal');
+        }
+
+        // Eliminar registro
+        function confirmDelete(id) {
+            if (confirm('¿Estás seguro de eliminar este registro?')) {
+                const meals = loadMeals().filter(m => m.id !== id);
+                saveMeals(meals);
+                alert('Registro eliminado');
+                searchMeals();
+            }
+        }
+
+        // Mostrar resumen
+        function showSummary() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            let meals = loadMeals();
+            let filteredMeals = meals.filter(meal => meal.date >= startDate && meal.date <= endDate);
+
+            // Ordenar comidas por fecha y hora
+            filteredMeals = sortMeals(filteredMeals);
+
+            // Agrupar comidas por fecha
+            let mealsByDate = {};
+            filteredMeals.forEach(meal => {
+                if (!mealsByDate[meal.date]) {
+                    mealsByDate[meal.date] = { userWeight: "", meals: [] };
+                }
+                if (meal.type === "Peso Usuario") {
+                    mealsByDate[meal.date].userWeight = meal.userWeight;
+                } else {
+                    mealsByDate[meal.date].meals.push(meal);
+                }
+            });
+
+            // Calcular la diferencia de peso con el día anterior
+            let previousWeight = null;
+            let summaryHTML = '<h3>Resumen de Comidas</h3>';
+            if (Object.keys(mealsByDate).length > 0) {
+                for (let date in mealsByDate) {
+                    const currentWeight = mealsByDate[date].userWeight;
+                    let weightDifference = "";
+                    if (previousWeight !== null && currentWeight) {
+                        const difference = (currentWeight - previousWeight).toFixed(2);
+                        weightDifference = ` (Diferencia: ${difference} kg)`;
+                    }
+                    previousWeight = currentWeight;
+
+                    summaryHTML += `
+                        <div class="day-summary">
+                            <h4>Fecha: ${formatDate(date)}</h4>
+                            <p><strong>Peso del Usuario:</strong> ${mealsByDate[date].userWeight || "No registrado"} kg${weightDifference}</p>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Hora</th>
+                                        <th>Tipo de Comida</th>
+                                        <th>Comida</th>
+                                        <th>Peso (g)</th>
+                                        <th>Bebida</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+                    mealsByDate[date].meals.forEach(meal => {
+                        summaryHTML += `
+                            <tr>
+                                <td>${meal.time}</td>
+                                <td>${meal.type}</td>
+                                <td>${meal.food}</td>
+                                <td>${meal.weight}</td>
+                                <td>${meal.drink}</td>
+                            </tr>
+                        `;
+                    });
+                    summaryHTML += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }
+            } else {
+                summaryHTML += '<p>No hay registros para las fechas seleccionadas.</p>';
+            }
+
+            summaryResult.innerHTML = summaryHTML;
+        }
+
+        // Formatear fecha como "día de la semana, dd/mm/aaaa"
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const days = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+            const dayName = days[date.getDay()];
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${dayName}, ${day}/${month}/${year}`;
+        }
+
+        // Ordenar registros por fecha y hora
+        function sortMeals(meals) {
+            return meals.sort((a, b) => {
+                if (a.date === b.date) {
+                    return a.time.localeCompare(b.time);
+                }
+                return a.date.localeCompare(b.date);
+            });
+        }
+
+        // Exportar datos a Excel (XLSX)
+        function exportToExcel() {
+            let meals = loadMeals();
+            if (meals.length === 0) {
+                alert('No hay datos para exportar.');
+                return;
+            }
+
+            // Ordenar comidas por fecha y hora
+            meals = sortMeals(meals);
+
+            // Crear un libro de Excel
+            const workbook = XLSX.utils.book_new();
+
+            // Agrupar comidas por fecha
+            let mealsByDate = {};
+            meals.forEach(meal => {
+                if (!mealsByDate[meal.date]) {
+                    mealsByDate[meal.date] = { userWeight: "", meals: [] };
+                }
+                if (meal.type === "Peso Usuario") {
+                    mealsByDate[meal.date].userWeight = meal.userWeight;
+                } else {
+                    mealsByDate[meal.date].meals.push(meal);
+                }
+            });
+
+            // Crear una hoja de Excel
+            const worksheetData = [];
+            for (let date in mealsByDate) {
+                // Añadir la fecha y el peso del usuario
+                worksheetData.push([`Fecha: ${formatDate(date)}`, ``, `Peso del Usuario: ${mealsByDate[date].userWeight || "No registrado"} kg`]);
+                // Añadir encabezados de la tabla
+                worksheetData.push(["Hora", "Tipo de Comida", "Comida", "Peso (g)", "Bebida"]);
+                // Añadir las comidas
+                mealsByDate[date].meals.forEach(meal => {
+                    worksheetData.push([meal.time, meal.type, meal.food, meal.weight, meal.drink]);
+                });
+                // Añadir una fila vacía entre días
+                worksheetData.push([]);
+            }
+
+            const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Resumen de Comidas");
+
+            // Guardar el archivo
+            XLSX.writeFile(workbook, "registro_comidas.xlsx");
+        }
+
+        // Inicialización
+        showPage('mainMenu');
+    </script>
+</body>
+</html>
